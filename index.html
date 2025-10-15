@@ -3,218 +3,247 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2D Mini-Golf</title>
+    <title>2D Mini Golf</title>
     <style>
         body {
+            background-color: #f0f8ff; /* AliceBlue */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex;
-            justify-content: center;
-            align-items: center;
             flex-direction: column;
-            height: 100vh;
+            align-items: center;
+            justify-content: center;
             margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f4f9;
+            height: 100vh;
             color: #333;
+            text-align: center;
         }
-        #game-canvas {
-            background-color: #2ecc71; /* A nice green for the course */
-            border: 5px solid #27ae60;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            cursor: pointer;
+        canvas {
+            border: 4px solid #333;
+            border-radius: 8px;
+            cursor: crosshair;
+            background-color: #4CAF50; /* Fallback color, JS will paint it */
         }
         h1 {
-            margin-bottom: 0.5em;
+            margin-bottom: 10px;
         }
-        p {
-            font-size: 1.2em;
+        #score {
+            font-size: 1.5em;
             font-weight: bold;
             margin-top: 0;
+            margin-bottom: 15px;
+            min-width: 150px; /* Prevent layout shift */
         }
     </style>
 </head>
 <body>
-    <h1>Mini-Golf Challenge</h1>
-    <p>Strokes: <span id="strokes-display">0</span></p>
-    <canvas id="game-canvas" width="800" height="500"></canvas>
+    <h1>Mini Golf Challenge</h1>
+    <p id="score">Strokes: 0</p>
+    <canvas id="golfCanvas"></canvas>
 
     <script>
-        window.onload = function() {
-            // --- Canvas & Context Setup ---
-            const canvas = document.getElementById('game-canvas');
-            const ctx = canvas.getContext('2d');
-            const strokesDisplay = document.getElementById('strokes-display');
+        const canvas = document.getElementById('golfCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
 
-            // --- Game Configuration ---
-            const FRICTION = 0.98;
-            const POWER_SCALE = 0.1;
-            const MIN_VELOCITY = 0.05;
+        canvas.width = 800;
+        canvas.height = 600;
 
-            // --- Game Objects ---
-            let ball = {
-                x: 100,
-                y: canvas.height / 2,
-                radius: 12,
-                color: '#ffffff',
-                vx: 0,
-                vy: 0
-            };
+        // --- Game State ---
+        let strokes = 0;
+        let ballInHole = false;
 
-            const hole = {
-                x: canvas.width - 100,
-                y: canvas.height / 2,
-                radius: 18,
-                color: '#000000'
-            };
+        // --- Game Objects ---
+        const ball = {
+            x: 100,
+            y: canvas.height / 2,
+            radius: 10,
+            vx: 0,
+            vy: 0,
+            color: 'white'
+        };
 
-            // --- Game State ---
-            let strokes = 0;
-            let isAiming = false;
-            let isBallMoving = false;
-            let aimStart = { x: 0, y: 0 };
-            let aimEnd = { x: 0, y: 0 };
+        const hole = {
+            x: 700,
+            y: canvas.height / 2,
+            radius: 15,
+            color: 'black'
+        };
 
-            // --- Utility Functions ---
-            function getMousePos(canvas, evt) {
-                const rect = canvas.getBoundingClientRect();
-                return {
-                    x: evt.clientX - rect.left,
-                    y: evt.clientY - rect.top
-                };
+        // --- Physics Constants ---
+        const FRICTION = 0.985;
+        const MIN_VELOCITY_SQ = 0.05 * 0.05; // Use squared value for performance
+        const POWER_MULTIPLIER = 0.1;
+
+        // --- Mouse State ---
+        let mouse = { x: 0, y: 0 };
+        let isMouseDown = false;
+
+        // --- Event Listeners ---
+        canvas.addEventListener('mousedown', (e) => {
+            if (ballInHole) {
+                resetLevel();
+                return;
             }
-
-            function getDistance(p1, p2) {
-                return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+            if (ballIsStationary()) {
+                isMouseDown = true;
             }
+        });
 
-            // --- Game Logic ---
-            function resetGame() {
-                strokes = 0;
-                strokesDisplay.textContent = strokes;
-                ball.x = 100;
-                ball.y = canvas.height / 2;
+        canvas.addEventListener('mouseup', (e) => {
+            if (isMouseDown) {
+                isMouseDown = false;
+                
+                const dx = ball.x - mouse.x;
+                const dy = ball.y - mouse.y;
+
+                ball.vx = dx * POWER_MULTIPLIER;
+                ball.vy = dy * POWER_MULTIPLIER;
+                
+                strokes++;
+                updateScore();
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+
+        // --- Helper Functions ---
+        function ballIsStationary() {
+            return (ball.vx * ball.vx + ball.vy * ball.vy) < MIN_VELOCITY_SQ;
+        }
+
+        function updateScore() {
+            scoreEl.textContent = `Strokes: ${strokes}`;
+        }
+
+        function resetLevel() {
+            ball.x = 100;
+            ball.y = canvas.height / 2;
+            ball.vx = 0;
+            ball.vy = 0;
+            strokes = 0;
+            ballInHole = false;
+            updateScore();
+        }
+
+        // --- Drawing Functions ---
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawHole() {
+            ctx.beginPath();
+            ctx.arc(hole.x, hole.y, hole.radius, 0, Math.PI * 2);
+            ctx.fillStyle = hole.color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawAimLine() {
+            if (isMouseDown && ballIsStationary()) {
+                ctx.beginPath();
+                ctx.moveTo(ball.x, ball.y);
+                ctx.lineTo(mouse.x, mouse.y);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([5, 10]);
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset line dash
+                ctx.closePath();
+            }
+        }
+        
+        function drawWinScreen() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 50px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Congratulations!`, canvas.width / 2, canvas.height / 2 - 40);
+            
+            ctx.font = '30px Arial';
+            ctx.fillText(`Strokes: ${strokes}`, canvas.width / 2, canvas.height / 2 + 20);
+            
+            ctx.font = '20px Arial';
+            ctx.fillText(`Click to play again`, canvas.width / 2, canvas.height / 2 + 70);
+        }
+
+        // --- Game Logic ---
+        function update() {
+            if (ballInHole) return;
+
+            // Apply friction
+            ball.vx *= FRICTION;
+            ball.vy *= FRICTION;
+
+            // Stop the ball if velocity is very low
+            if (ballIsStationary()) {
                 ball.vx = 0;
                 ball.vy = 0;
-                isBallMoving = false;
-            }
-
-            function update() {
-                if (!isBallMoving) return;
-
-                // Apply friction
-                ball.vx *= FRICTION;
-                ball.vy *= FRICTION;
-
-                // Check if ball has stopped
-                if (Math.abs(ball.vx) < MIN_VELOCITY && Math.abs(ball.vy) < MIN_VELOCITY) {
-                    ball.vx = 0;
-                    ball.vy = 0;
-                    isBallMoving = false;
-                }
-
-                // Update position
+            } else {
+                // Update position only if moving
                 ball.x += ball.vx;
                 ball.y += ball.vy;
-
-                // Wall collisions
-                if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
-                    ball.vx *= -1;
-                    ball.x = (ball.x + ball.radius > canvas.width) ? canvas.width - ball.radius : ball.radius;
-                }
-                if (ball.y + ball.radius > canvas.height || ball.y - ball.radius < 0) {
-                    ball.vy *= -1;
-                    ball.y = (ball.y + ball.radius > canvas.height) ? canvas.height - ball.radius : ball.radius;
-                }
-                
-                // Check for win condition
-                const distToHole = getDistance(ball, hole);
-                if (distToHole < hole.radius - ball.radius / 2) { // Ball should go in a bit
-                    isBallMoving = false;
-                    ball.vx = 0;
-                    ball.vy = 0;
-                    setTimeout(() => {
-                        alert(`Congratulations! You finished in ${strokes} strokes.`);
-                        resetGame();
-                    }, 100);
-                }
             }
 
-            // --- Drawing Functions ---
-            function draw() {
-                // Clear canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Draw hole
-                ctx.beginPath();
-                ctx.arc(hole.x, hole.y, hole.radius, 0, Math.PI * 2);
-                ctx.fillStyle = hole.color;
-                ctx.fill();
-                ctx.closePath();
-
-                // Draw ball
-                ctx.beginPath();
-                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-                ctx.fillStyle = ball.color;
-                ctx.fill();
-                ctx.closePath();
-
-                // Draw aiming line
-                if (isAiming) {
-                    ctx.beginPath();
-                    ctx.moveTo(ball.x, ball.y);
-                    ctx.lineTo(aimEnd.x, aimEnd.y);
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-                    ctx.lineWidth = 3;
-                    ctx.setLineDash([5, 5]);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                    ctx.closePath();
-                }
+            // Wall collisions with energy loss
+            if (ball.x + ball.radius >= canvas.width) {
+                ball.x = canvas.width - ball.radius;
+                ball.vx *= -0.8;
+            } else if (ball.x - ball.radius <= 0) {
+                ball.x = ball.radius;
+                ball.vx *= -0.8;
             }
 
-            // --- Event Handlers ---
-            canvas.addEventListener('mousedown', (e) => {
-                if (isBallMoving) return;
-
-                const mousePos = getMousePos(canvas, e);
-                if (getDistance(mousePos, ball) < ball.radius) {
-                    isAiming = true;
-                    aimStart = { x: ball.x, y: ball.y };
-                    aimEnd = mousePos;
-                }
-            });
-
-            canvas.addEventListener('mousemove', (e) => {
-                if (!isAiming) return;
-                aimEnd = getMousePos(canvas, e);
-            });
-
-            canvas.addEventListener('mouseup', (e) => {
-                if (!isAiming) return;
-                isAiming = false;
-                
-                const shotPowerX = (aimStart.x - aimEnd.x) * POWER_SCALE;
-                const shotPowerY = (aimStart.y - aimEnd.y) * POWER_SCALE;
-                
-                ball.vx = shotPowerX;
-                ball.vy = shotPowerY;
-                
-                isBallMoving = true;
-                strokes++;
-                strokesDisplay.textContent = strokes;
-            });
-
-            // --- Game Loop ---
-            function gameLoop() {
-                update();
-                draw();
-                requestAnimationFrame(gameLoop);
+            if (ball.y + ball.radius >= canvas.height) {
+                ball.y = canvas.height - ball.radius;
+                ball.vy *= -0.8;
+            } else if (ball.y - ball.radius <= 0) {
+                ball.y = ball.radius;
+                ball.vy *= -0.8;
             }
 
-            // Start the game
-            resetGame(); // To set initial text content
-            gameLoop();
-        };
+            // Check for win condition
+            const distToHoleSq = (ball.x - hole.x)**2 + (ball.y - hole.y)**2;
+            if (distToHoleSq < hole.radius**2 && ballIsStationary()) {
+                ballInHole = true;
+            }
+        }
+
+        // --- Main Game Loop ---
+        function gameLoop() {
+            // Clear canvas
+            ctx.fillStyle = '#4CAF50'; // Green course color
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw elements
+            drawHole();
+            drawBall();
+            drawAimLine();
+
+            // Update game state
+            update();
+            
+            // Draw win screen if necessary
+            if (ballInHole) {
+                drawWinScreen();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Initial Setup ---
+        resetLevel(); 
+        gameLoop();
+
     </script>
 </body>
 </html>
